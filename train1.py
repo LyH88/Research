@@ -8,8 +8,9 @@ import shutil
 import csv
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
+import pandas as pd
 
-from utils import sparse2tensor, spmatmul, MNIST_S2_Loader, Test_Loader
+from utils import sparse2tensor, spmatmul, MNIST_S2_Loader, Test_Loader, Better_Loader
 from ops import MeshConv
 from model import Model, DeformModel2
 
@@ -24,6 +25,7 @@ def train(args, model, device, train_loader, optimizer, epoch, logger):
     model.train()
     train_loss = 0
     correct = 0
+    batch = 0
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device) # data is input data, target is labels
         optimizer.zero_grad()
@@ -45,20 +47,28 @@ def train(args, model, device, train_loader, optimizer, epoch, logger):
         # for i, j in enumerate(target):
         #     if target[i].long() == 0:
         #         out[i] = 1 - out[i]
-        loss = F.binary_cross_entropy(output, target.float()) # replace out by output
-        train_loss += loss.item()
+        #loss = F.binary_cross_entropy(output, target) # replace out by output
+        #train_loss += loss.item()
+
+        loss = nn.BCELoss(reduction='mean')
+        loss = loss(output, target)
+        train_loss += loss
         loss.backward()
         optimizer.step()
+        batch += 1
+
     
-    train_loss /= len(train_loader.dataset)
+    train_loss /= batch
     logger.info('Train set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%) \r'.format(
                 train_loss, correct, len(train_loader.dataset),
                 100. * correct / len(train_loader.dataset)))
+
 
 def test(args, model, device, test_loader, logger):
     model.eval()
     test_loss = 0
     correct = 0
+    batch = 0
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
@@ -66,7 +76,7 @@ def test(args, model, device, test_loader, logger):
 
             #pred = output.max(1, keepdim=True)[1]
 
-            out = output.max(1, keepdim=True)[0]  # get the index of the max log-probability
+            #out = output.max(1, keepdim=True)[0]  # get the index of the max log-probability
 
             pred = output.clone()
             for i in range(len(output)):
@@ -78,9 +88,15 @@ def test(args, model, device, test_loader, logger):
 
             #print(output)
             correct += pred.eq(target.view_as(pred)).sum().item()
-            test_loss += F.binary_cross_entropy(output, target.float()).item()  # sum up batch loss replace out by output
+            #test_loss += F.binary_cross_entropy(output, target.float()).item()  # sum up batch loss replace out by output
 
-    test_loss /= len(test_loader.dataset)
+            loss = nn.BCELoss(reduction='mean')
+            loss = loss(output, target)
+            test_loss += loss
+            batch += 1
+
+
+    test_loss /= batch
     logger.info('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%) \r'.format(
                 test_loss, correct, len(test_loader.dataset),
                 100. * correct / len(test_loader.dataset)))
@@ -90,12 +106,13 @@ def validation(args, model, device, valid_loader, logger):
     model.eval()
     valid_loss = 0
     correct = 0
+    batch = 0
     with torch.no_grad():
         for data, target in valid_loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
             #pred = 1 - output.max(1, keepdim=True)[1]  # get the index of the max log-probability
-            out = output.max(1, keepdim=True)[0]  # get the index of the max log-probability
+            #out = output.max(1, keepdim=True)[0]  # get the index of the max log-probability
 
             pred = output.clone()
             for i in range(len(output)):
@@ -106,9 +123,13 @@ def validation(args, model, device, valid_loader, logger):
             target = target.float()
 
             correct += pred.eq(target.view_as(pred)).sum().item()
-            valid_loss += F.binary_cross_entropy(output, target.float()).item()  # sum up batch loss
+            #valid_loss += F.binary_cross_entropy(output, target.float()).item()  # sum up batch loss
+            loss = nn.BCELoss(reduction='mean')
+            loss = loss(output, target)
+            valid_loss += loss
+            batch += 1
 
-    valid_loss /= len(valid_loader.dataset)
+    valid_loss /= batch
     logger.info('Validation set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%) \r'.format(
         valid_loss, correct, len(valid_loader.dataset),
         100. * correct / len(valid_loader.dataset)))
@@ -177,54 +198,95 @@ def main():
 
     ########################################################## Testing code
 
-    trainset = Test_Loader(args.datafile, "train")
-    train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, **kwargs)
-
-    testset = Test_Loader(args.datafile, "test")
-    test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=True, **kwargs)
-    validset = Test_Loader(args.datafile, "validation")
-    valid_loader = DataLoader(validset, batch_size=args.batch_size, shuffle=True, **kwargs)
+    # trainset = Test_Loader(args.datafile, "train")
+    # train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, **kwargs)
+    # testset = Test_Loader(args.datafile, "test")
+    # test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=True, **kwargs)
+    # validset = Test_Loader(args.datafile, "validation")
+    # valid_loader = DataLoader(validset, batch_size=args.batch_size, shuffle=True, **kwargs)
 
     ##########################################################
 
 
    # model = Model(mesh_folder=args.mesh_folder, feat=args.feat)
 
-    model = DeformModel2(mesh_folder=args.mesh_folder, feat=args.feat)
-    model = nn.DataParallel(model).cuda()
-    model.to(device)
+    # model = DeformModel2(mesh_folder=args.mesh_folder, feat=args.feat)
+    # model = nn.DataParallel(model).cuda()
+    # model.to(device)
 
-    logger.info("{} paramerters in total".format(sum(x.numel() for x in model.parameters())))
+    # logger.info("{} paramerters in total".format(sum(x.numel() for x in model.parameters())))
+    #
+    # if args.optim == "sgd":
+    #     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+    # else:
+    #     optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    #
+    # if args.decay:
+    #     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
 
-    if args.optim == "sgd":
-        optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
-    else:
-        optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    table = pd.read_csv('/home/haol/Python Script/updated_table.csv')
+    td = table[table['dx_group'] == 0][:10]
+    asd = table[table['dx_group'] == 1][:10]
+    td = td.sample(frac=1).reset_index(drop=True)
+    asd = asd.sample(frac=1).reset_index(drop=True) # Results vary with random shuffling
 
-    if args.decay:
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    for j in range(3): # range 7
+        loss = []
+        lst = []
+        trainset = Better_Loader(args.datafile, j, td, asd, "train")
+        train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, **kwargs)
+        testset = Better_Loader(args.datafile, j, td, asd, "test")
+        test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=True, **kwargs)
+        validset = Better_Loader(args.datafile, j, td, asd, "validation")
+        valid_loader = DataLoader(validset, batch_size=args.batch_size, shuffle=True, **kwargs)
 
-    loss = []
-    lst = []
-    for epoch in range(1,args.epochs + 1): #args.epochs + 1
+        model = DeformModel2(mesh_folder=args.mesh_folder, feat=args.feat)
+        model = nn.DataParallel(model).cuda()
+        model.to(device)
+
+        logger.info("{} paramerters in total".format(sum(x.numel() for x in model.parameters())))
+
+        if args.optim == "sgd":
+            optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+        else:
+            optimizer = optim.Adam(model.parameters(), lr=args.lr)
+
         if args.decay:
-            scheduler.step()
-        logger.info("[Epoch {}]".format(epoch))
-        train(args, model, device, train_loader, optimizer, epoch, logger)
-        loss.append(validation(args, model, device, valid_loader, logger))
-        lst.append(test(args, model, device, test_loader, logger))
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.8)
 
-    if loss.index(min(loss)) < 30:
-        loss = loss[30:]
-    idx = loss.index(min(loss))
-    output, target = lst[idx]
-    print(idx, loss[idx])
+        for epoch in range(1, args.epochs + 1):  # args.epochs + 1
+            if args.decay:
+                scheduler.step()
+            logger.info("[Epoch {}]".format(epoch))
+            train(args, model, device, train_loader, optimizer, epoch, logger)
+            loss.append(validation(args, model, device, valid_loader, logger))
+            lst.append(test(args, model, device, test_loader, logger))
 
-    fpr, tpr, thresholds = roc_curve(target.cpu().numpy(), output.cpu().numpy(), drop_intermediate=False)
-    au = auc(fpr, tpr)
-    print('AUC: ', au)
-    plt.plot(fpr, tpr)
+
+        if loss.index(min(loss)) < 20:
+            loss = loss[20:]
+            idx = loss.index(min(loss))+20
+            print(idx + 1, loss[idx-20])
+        else:
+            idx = loss.index(min(loss))
+            print(idx + 1, loss[idx])
+
+        output, target = lst[idx]
+
+        fpr, tpr, thresholds =roc_curve(target.cpu().numpy(), output.cpu().numpy(), drop_intermediate=False)
+        au = auc(fpr,tpr)
+        plt.plot(fpr, tpr, lw=1, alpha=0.3,
+                 label='ROC fold %d (AUC = %0.2f)' % (j, au))
+        print(au)
+
+
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC curves')
+    plt.legend(loc="lower right")
     plt.show()
-        
+
+
+
 if __name__ == "__main__":
     main()
