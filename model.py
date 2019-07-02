@@ -84,7 +84,7 @@ class Model(nn.Module):
 class DeformModel2(nn.Module):
     # nclasses=363 - ALL
     # step5
-    def __init__(self, mesh_folder, feat=16, nclasses=1):
+    def __init__(self, mesh_folder, feat=16, nclasses=1, n_metadata_features=2):
         super().__init__()
         mf = os.path.join(mesh_folder, "icosphere_5.pkl")
         self.in_conv = MeshConv(2, feat, mesh_file=mf, stride=2)
@@ -97,8 +97,7 @@ class DeformModel2(nn.Module):
         self.block2 = ResBlock(in_chan=4 * feat, neck_chan=4 * feat, out_chan=16 * feat, level=2, coarsen=True,
                                mesh_folder=mesh_folder)
         self.avg = nn.AvgPool1d(kernel_size=self.block2.nv_prev)  # output shape batch x channels x 1
-        self.out_layer = nn.Linear(16 * feat, nclasses)  # replaced: nclasses
-
+        self.resnet_outlayer = nn.Linear(16 * feat, nclasses)  # replaced: nclasses
 
         # self.block1 = ResBlock(in_chan=feat, neck_chan=feat, out_chan=4 * feat, level=4, coarsen=True,
         #                        mesh_folder=mesh_folder)
@@ -109,10 +108,14 @@ class DeformModel2(nn.Module):
         # self.avg = nn.AvgPool1d(kernel_size=self.block3.nv_prev)  # output shape batch x channels x 1
         # self.out_layer = nn.Linear(64 * feat, nclasses)
 
+        # Metadata feature layers
+        # self.metadata_dense_1 = nn.Linear(n_metadata_features, nclasses)
 
+        # after concatenation
+        self.final_outlayer = nn.Linear(n_metadata_features + 1, nclasses)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, x, y):
         x = self.in_block(x)
         x = self.block1(x)
         x = self.block2(x)
@@ -123,8 +126,43 @@ class DeformModel2(nn.Module):
         x = torch.squeeze(self.avg(x))
 
         #x = F.dropout(x, training=self.training)
-        x = self.out_layer(x)
+
+        x = self.resnet_outlayer(x)
+        y = torch.from_numpy(y).cuda()
+        x = torch.cat((x, y), 1)
+        x = self.final_outlayer(x)
         x = self.sigmoid(x)
 
         #return F.softmax(x, dim=1)
         return x
+
+
+
+class mod(nn.Module):
+    def __init__(self, mesh_folder, feat =16,   nclasses=1):
+        super().__init__()
+        mf = os.path.join(mesh_folder, "icosphere_4.pkl")
+
+        #self.conv1d = nn.Conv1d(in_chan,16, 3 ,stride = 1)
+        self.fc = nn.Linear(1284, 1)
+        self.relu = nn.ReLU(inplace=True)
+        self.bn1 = nn.BatchNorm1d(2)
+        #mf = os.path.join(mesh_folder, "icosphere_4.pkl")
+        self.in_conv = MeshConv(2, 2, mesh_file=mf, stride=2)
+        self.in_bn = nn.BatchNorm1d(feat)
+        self.relu = nn.ReLU(inplace=True)
+        self.in_block = nn.Sequential(self.in_conv,  self.relu)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self,x):
+        batch_size = x.shape[0]
+        x = self.in_block(x)
+        # x = self.conv1d(x)
+        # x = self.bn1(x)
+        # x = self.relu(x)
+        print (x.shape)
+        x = x.view(batch_size, -1)
+        x = self.fc(x)
+        x = self.sigmoid(x)
+        return x
+

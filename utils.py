@@ -9,6 +9,8 @@ import pandas as pd
 from os.path import join
 from joblib import Parallel, delayed
 import multiprocessing
+import sys
+from sklearn.preprocessing import normalize
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
@@ -99,7 +101,7 @@ class Test_Loader(Dataset):
         """
         assert(partition in ["train", "test", "validation"])
         lev_sphere = [12, 42, 162, 642, 2562, 10242, 40962, 163842]
-        self.level = lev_sphere[6]
+        self.level = lev_sphere[5]
         if partition == "train":
             label, matrix = self.readin(data_dir, 'CTtrain.txt', '/home/haol/Python Script/CV6/CTtraintable.csv')
             #label2, matrix2 = self.readin(data_dir, 'Htrain.txt', '/home/haol/Python Script/CV2/Htraintable.csv')
@@ -155,6 +157,7 @@ class Test_Loader(Dataset):
     def __getitem__(self, idx):
         return self.x[idx], self.y[idx]
 
+
     def readin(self, data_dir, spec_dir, csv_path):
         label = pd.read_csv(csv_path)['dx_group'].values.astype(np.int64) #[0:20]
         full_dir = data_dir + spec_dir
@@ -175,132 +178,127 @@ class Test_Loader(Dataset):
 class Better_Loader(Dataset):
     """Data loader for dataset."""
 
-    def __init__(self, data_dir, cv, td, asd, partition="train"):  # data_dir = "/fs4/masi/haol/data/"
-        """
-        Args:
-            data_dir: path to the folder containing all datafiles
-            partition: train or test
-        """
+    def __init__(self, data_dir, train, test, valid, partition="train"):  # data_dir = "/fs4/masi/haol/data/"
         assert (partition in ["train", "test", "validation"])
         lev_sphere = [12, 42, 162, 642, 2562, 10242, 40962, 163842]
         self.level = lev_sphere[5]
-
-        # table = pd.read_csv('/home/haol/Python Script/updated_table.csv')
-        # td = table[table['dx_group'] == 0]
-        # asd = table[table['dx_group'] == 1]
-        # td = td.sample(frac=1).reset_index(drop=True)
-        # asd = asd.sample(frac=1).reset_index(drop=True)
-        train, test, valid = self.k_folds(cv, td, asd)
+        self.demo_num = 2
 
         if partition == "train":
             trainfile = train['Session'].values.astype(str)
             label = train['dx_group'].values.astype(np.int64)
-            matrix = self.readin(data_dir, '.lh.CT.txt', trainfile)
-            #matrix2 = self.readin(data_dir, '.rh.CT.txt', trainfile)
-            self.x = matrix
-            self.y = label
 
-            # x = np.concatenate((matrix, matrix2),1)
-            # self.y = label
-            # self.x = x
+            # matrix = self.readin(data_dir, '.lh.CT.txt', trainfile)  # accuracy: < 64%, validation 74%, auc:0.5,0.56,0.2
+            # matrix_ = self.readin(data_dir, '.rh.CT.txt', trainfile)
+            # matrix2 = self.readin(data_dir, '.lh.SD.txt', trainfile)  # accuracy: < 72%, validation 77%, auc:0.83,0.71
+            # matrix2_ = self.readin(data_dir, '.rh.SD.txt', trainfile)
+            matrix3 = self.readin(data_dir, '.lh.LGI.txt', trainfile)  # accuracy: < 48%, validation 76%, auc: < 0.5
+            matrix3_ = self.readin(data_dir, '.rh.LGI.txt', trainfile)
+            #matrix4 = self.readin(data_dir, '.lh.SCI.txt', trainfile)  # accuracy: < 50%, validation 60%, auc = 0.5
+            #matrix4_ = self.readin(data_dir, '.rh.SCI.txt', trainfile)
+            #matrix5 = self.readin(data_dir, '.lh.S.txt', trainfile)  # accuracy: < 61%, validation 67%, auc < 0.38
+            #matrix5_ = self.readin(data_dir, '.rh.S.txt', trainfile)
+            #matrix6 = self.readin(data_dir, '.lh.H.txt', trainfile) # accuracy: < 50%, validation 68%, auc < 0.67,0.38,0.2
+            #matrix6_ = self.readin(data_dir, '.rh.H.txt', trainfile)
+
+            lab = np.expand_dims(label, 1)
+            meta = self.demographic(train)
+            meta1 = np.reshape(meta, (self.demo_num, -1)).T
+            label_mat = np.concatenate((lab, meta1), 1)
+            self.y = label_mat
+            # self.x = matrix
+
+            x = np.concatenate((matrix3, matrix3_),1)
+            self.x = x
+            #self.y = label
         elif partition == "test":
             testfile = test['Session'].values.astype(str)
             label = test['dx_group'].values.astype(np.int64)
-            matrix = self.readin(data_dir, '.lh.CT.txt', testfile)
-            #matrix2 = self.readin(data_dir, '.rh.CT.txt', testfile)
-            self.x = matrix
-            self.y = label
 
-            # x = np.concatenate((matrix, matrix2), 1)
-            # self.y = label
-            # self.x = x
+            # matrix = self.readin(data_dir, '.lh.CT.txt', testfile)
+            # matrix_ = self.readin(data_dir, '.rh.CT.txt', testfile)
+            # matrix2 = self.readin(data_dir, '.lh.SD.txt', testfile)
+            # matrix2_ = self.readin(data_dir, '.rh.SD.txt', testfile)
+            matrix3 = self.readin(data_dir, '.lh.LGI.txt', testfile)
+            matrix3_ = self.readin(data_dir, '.rh.LGI.txt', testfile)
+            #matrix4 = self.readin(data_dir, '.lh.SCI.txt', testfile)
+            #matrix4_ = self.readin(data_dir, '.rh.SCI.txt', testfile)
+            #matrix5 = self.readin(data_dir, '.lh.S.txt', testfile)
+            #matrix5_ = self.readin(data_dir, '.rh.S.txt', testfile)
+            # matrix6 = self.readin(data_dir, '.lh.H.txt', testfile)
+            # matrix6_ = self.readin(data_dir, '.rh.H.txt', testfile)
+            #self.y = label
+
+            lab = np.expand_dims(label, 1)
+            meta = self.demographic(test)
+            meta1 = np.reshape(meta, (self.demo_num, -1)).T
+            label_mat = np.concatenate((lab, meta1), 1)
+            self.y = label_mat
+            #self.x = matrix
+
+            x = np.concatenate((matrix3, matrix3_), 1)
+            #self.y = label
+            self.x = x
         else:
             validfile = valid['Session'].values.astype(str)
             label = valid['dx_group'].values.astype(np.int64)
-            matrix = self.readin(data_dir, '.lh.CT.txt', validfile)
-            #matrix2 = self.readin(data_dir, '.rh.CT.txt', validfile)
-            self.x = matrix
-            self.y = label
 
-            # x = np.concatenate((matrix, matrix2), 1)
+            #matrix = self.readin(data_dir, '.lh.CT.txt', validfile)
+            #matrix2 = self.readin(data_dir, '.lh.SD.txt', validfile)
+            #matrix2_ = self.readin(data_dir, '.rh.SD.txt', validfile)
+            matrix3 = self.readin(data_dir, '.lh.LGI.txt', validfile)
+            matrix3_ = self.readin(data_dir, '.rh.LGI.txt', validfile)
+            #matrix4 = self.readin(data_dir, '.lh.SCI.txt', validfile)
+            #matrix4_ = self.readin(data_dir, '.rh.SCI.txt', validfile)
+            #matrix5 = self.readin(data_dir, '.lh.S.txt', validfile)
+            #matrix5_ = self.readin(data_dir, '.rh.S.txt', validfile)
+            #matrix6 = self.readin(data_dir, '.lh.H.txt', validfile)
+            #matrix6_ = self.readin(data_dir, '.rh.H.txt', validfile)
+
+            lab = np.expand_dims(label, 1)
+            meta = self.demographic(valid)
+            meta1 = np.reshape(meta, (self.demo_num, -1)).T
+            label_mat = np.concatenate((lab, meta1), 1)
+            self.y = label_mat
+            # self.x = matrix
+
+            x = np.concatenate((matrix3, matrix3_), 1)
             # self.y = label
-            # self.x = x
+            self.x = x
 
         print(np.shape(self.x))
         print(np.shape(self.y))
 
     def readin(self, data_dir, channel_name, session):  # channel_name: '.CT.txt', session: trainfile
-        H = np.array([])
-        for i, name in enumerate(session):
-            if i % 5 == 0:
-                print(i)
-            f = join(data_dir, name) + channel_name
-            H = np.concatenate([H, np.loadtxt(fname=f)])
+        H = Parallel(n_jobs=18)(delayed(self.process)(i, name, data_dir, channel_name) for i, name in enumerate(session))
+        H.sort()
+        H = [r[1] for r in H]
         H = np.reshape(H, (-1, 163842))
         H = H[:, :self.level].astype(np.float32)
-
         H = np.expand_dims(H, 1)    # should be expanded if multi-channel
         return H
 
-    # def readin(self, data_dir, channel_name, session):  # channel_name: '.CT.txt', session: trainfile
-    #     # for i, name in enumerate(session):
-    #     #     H = self.process(i, name)
-    #     H = [None] * len(session)
-    #     #num_cores = multiprocessing.cpu_count()
-    #     H = Parallel(n_jobs=18, require='sharedmem')(delayed(self.process)(i, name, data_dir, channel_name, H) for i, name in enumerate(session))
-    #
-    #     H = np.reshape(H, (-1, 163842))
-    #     H = H[:, :self.level].astype(np.float32)
-    #     H = np.expand_dims(H, 1)    # should be expanded if multi-channel
-    #     return H
-    #
-    #
-    # def process(self, i, name, data_dir, channel_name, H):
-    #     if i % 5 == 0:
-    #         print(i)
-    #     f = join(data_dir, name) + channel_name
-    #     H[i] = np.loadtxt(fname=f)
-    #     return H
+    def process(self, i, name, data_dir, channel_name):
+        if i % 5 == 0:
+            print(i)
+        f = join(data_dir, name) + channel_name
+        return [i, np.loadtxt(fname=f)]
 
-    def k_folds(self, CV, TD, ASD, size_v=1, size_t=1):
-        k = 10
-        S_ASD = int(len(ASD) / k)
-        S_TD = int(len(TD) / k)
-        P_ASD = []
-        P_TD = []
-        for i in range(k + 1):
-            P_ASD.append(i * S_ASD)
-            P_TD.append(i * S_TD)
-        P_ASD[-1] = len(ASD)
-        P_TD[-1] = len(TD)
-        frames = []
-        frames2 = []
-        frames3 = []
-        for i in range(k - size_v - size_t):
-            idx1 = (CV + i) % k
-            idx2 = idx1 + 1
-            a = ASD.loc[range(P_ASD[idx1], P_ASD[idx2])]
-            b = TD.loc[range(P_TD[idx1], P_TD[idx2])]
-            frames.append(a)
-            frames.append(b)
-        train = pd.concat(frames, ignore_index=False)
-        for i in range(size_t):
-            idx3 = (idx2 + i) % k
-            idx4 = idx3 + 1
-            c = ASD.loc[range(P_ASD[idx3], P_ASD[idx4])]
-            d = TD.loc[range(P_TD[idx3], P_TD[idx4])]
-            frames2.append(c)
-            frames2.append(d)
-        test = pd.concat(frames2, ignore_index=False)
-        for i in range(size_v):
-            idx5 = (idx4 + i) % k
-            idx6 = idx5 + 1
-            e = ASD.loc[range(P_ASD[idx5], P_ASD[idx6])]
-            f = TD.loc[range(P_TD[idx5], P_TD[idx6])]
-            frames3.append(e)
-            frames3.append(f)
-        valid = pd.concat(frames3, ignore_index=False)
-        return train, test, valid
+    def demographic(self, table):
+        age = table['age_at_scan'].values.astype(np.int64)
+        age_norm = normalize(age[:, np.newaxis], axis=0).ravel()
+        # re1 = table.replace({'phi_gender': 0}, 2)  # (0, 1) to (2, 1)
+        re2 = table.replace({'phi_gender': 0}, -1)  # (0, 1) to (-1, 1)
+        sex = re2['phi_gender'].values.astype(np.int64)
+        a = table.replace({'Scan': 'Improved 3D'}, 1)
+        a = a.replace({'Scan': 'Improved 3D SENSE'}, 2)
+        a = a.replace({'Scan': 'T1W'}, 3)
+        a = a.replace({'Scan': 'T1W/3D/TFE'}, 4)
+        scan = a['Scan'].values.astype(np.int64)
+        metadata = np.concatenate((age_norm, sex)).astype(np.float32)
+        return metadata
+        #return age_norm
+
 
     def __len__(self):
         return len(self.y)
