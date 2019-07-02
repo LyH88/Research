@@ -43,7 +43,6 @@ def train(args, model, device, train_loader, optimizer, epoch, logger):
                 pred[i] = 0
         target = target.float()
 
-        #print(pred)
         correct += pred.eq(target.view_as(pred)).sum().item()
         # for i, j in enumerate(target):
         #     if target[i].long() == 0:
