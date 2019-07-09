@@ -185,21 +185,10 @@ def test(args, model, test_loader, epoch, device, logger, keep_id=None):
             count += n_data
     ious = ints_ / unis_
     accs /= per_cls_counts
-    #print(ints_, 'ints')
-    #print(unis_, 'unis')
-    #print(per_cls_counts, 'per_cls_counts')
-
     test_loss /= count
-    # print(per_cls_counts)
 
     logger.info('[Epoch {} {} stats]: MIoU: {:.4f}; Mean Accuracy: {:.4f}; Avg loss: {:.4f}'.format(
         epoch, test_loader.dataset.partition, np.mean(ious), np.mean(accs), test_loss))
-    # tabulate mean iou
-    # logger.info(tabulate(dict(zip(class_names[0:-1], [[iou] for iou in ious])), headers="keys"))
-    # logger.info(tabulate(dict(zip(class_names[0:-1], [[acc] for acc in accs])), headers="keys"))
-    # import scipy
-    # scipy.io.savemat('/fs4/masi/parvatp/targetDataParcel.mat', {'target': target.cuda().cpu().numpy()})
-    # scipy.io.savemat('/fs4/masi/parvatp/testDataParcel.mat', {'pred': pred.cuda().cpu().numpy()})
     scipy.io.savemat(os.path.join(args.log_dir, "testDataParcel.mat"),
                      {'fname': fname,'output': pred.cuda().detach().cpu().numpy(),
                       'prob': output.cuda().detach().cpu().numpy(),
@@ -271,8 +260,7 @@ def main():
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
 
-#    trainset = S2D3DSegLoader(args.data_folder, "train", fold=args.fold, sp_level=args.max_level, in_ch=len(args.in_ch))
-#    train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=False, drop_last=True)
+    # Load the data for prediction 
     valset = S2D3DSegLoader(args.data_folder, "test", fold=args.fold, sp_level=args.max_level, in_ch=len(args.in_ch))
     val_loader = DataLoader(valset, batch_size=args.batch_size, shuffle=False, drop_last=False)
 
@@ -310,8 +298,6 @@ def main():
 
         load_my_state_dict(model, resume_dict['state_dict'])
 
-
-
     logger.info("{} paramerters in total".format(sum(x.numel() for x in model.parameters())))
 
     if args.optim == "sgd":
@@ -322,33 +308,8 @@ def main():
     if args.decay:
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.9)
 
-    checkpoint_path = os.path.join(args.log_dir, 'checkpoint_latest.pth.tar')
+    # Get the best prediction matrix from the best tar file
     miou = test(args, model, val_loader, 0, device, logger, keep_id)
-
-    # training loop
-    # for epoch in range(start_ep + 1, args.epochs + 1):
-    #     if args.decay:
-    #         scheduler.step(epoch)
-    #     #loss = train(args, model, train_loader, optimizer, epoch, device, logger, keep_id)
-    #
-    #     if args.train_stats_freq > 0 and (epoch % args.train_stats_freq == 0):
-    #         _ = test(args, model, train_loader, epoch, device, logger, keep_id)
-    #     if miou > best_miou:
-    #         best_miou = miou
-    #         is_best = True
-    #     else:
-    #         is_best = False
-    #     # remove sparse matrices since they cannot be stored
-    #     state_dict_no_sparse = [it for it in model.state_dict().items() if
-    #                             it[1].type() != "torch.cuda.sparse.FloatTensor"]
-    #     state_dict_no_sparse = OrderedDict(state_dict_no_sparse)
-    #
-    #     save_checkpoint({
-    #         'epoch': epoch,
-    #         'state_dict': state_dict_no_sparse,
-    #         'best_miou': best_miou,
-    #         'optimizer': optimizer.state_dict(),
-    #     }, is_best, epoch, checkpoint_path, "_SUNet", logger)
 
 
 if __name__ == "__main__":
